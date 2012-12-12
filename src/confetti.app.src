@@ -1,0 +1,15 @@
+{application, confetti,
+ [
+  {description, "RESTful Configuration Management Server."},
+  {vsn, "0.0.1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  mnesia,
+                  cowboy,
+                  jsx
+                 ]},
+  {mod, { confetti_app, []}},
+  {env, []}
+ ]}.
