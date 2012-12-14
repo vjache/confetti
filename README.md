@@ -17,6 +17,13 @@ some ones. Also I believe that in some cases it is better to store configuration
 files under some version control. And also IMHO better to have config settings at 
 a central computer (probably under replication) than dispersed ones over cluster.
 
+It would be great to have an ability to say for application "hey, look for your 
+configuration there" e.g. through configuring a single config parameter - URL 
+where all other configuration parameters may be found.
+
+Also it would be great to have an ability to share a configuration variable between 
+applications but in some smart and safe way. Here comes to game contexts and subjects.
+
 ## Design & implementation notes ##
 
 Conceptually this service supports the notion of a storage backend, but currently 
