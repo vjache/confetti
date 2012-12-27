@@ -129,10 +129,10 @@ handle_info(scan_file_system, #state{config_dir=Dir}=State) ->
 	erlang:send_after(60000, self(), scan_file_system),
 	{noreply, State};
 
-handle_info({mnesia_table_event, {write, #source_file{file=File}, _}}, #state{config_dir=Dir}=State) ->
+handle_info({mnesia_table_event, {write, SrcFile = #source_file{file=File}, _}}, #state{config_dir=Dir}=State) ->
 	{Context, Subject} 	= parse_source_filename(Dir, File),
 	{ok, Body}			= file:read_file(File),
-	case jsx:decode(Body) of
+	try json_decode_lined(Body) of
 		{incomplete, _F} -> exit({bad_formed_json_file, File});
 		JSONObj when tuple_size(hd(JSONObj))==2 ->
 			{atomic,ok} = mnesia:transaction(
@@ -147,11 +147,26 @@ handle_info({mnesia_table_event, {write, #source_file{file=File}, _}}, #state{co
 														 origin  	 = File},
 										 mnesia:write(Var)
 									 end || {VarName, VarValue} <- JSONObj],
+									mnesia:write(SrcFile#source_file{parse_status=ok}),
 									ok
 							end),
 			ok;
 		[{}] ->
-			ok
+			{atomic,ok} = mnesia:transaction(
+							fun() ->
+									mnesia:write(SrcFile#source_file{parse_status=ok}),	ok
+							end)
+	catch
+		_:{json_parse_error, Reason, LineNo, Line} ->
+			{atomic,ok} = mnesia:transaction(
+							fun() ->
+									Status = {json_parse_error, 
+											  [{reason, Reason}, 
+											   {line_no, LineNo}, 
+											   {line, Line}, 
+											   {file, File}]},
+									mnesia:write(SrcFile#source_file{parse_status=Status}),	ok
+							end)
 	end,
 	{noreply, State};
 handle_info({cleanup_source_files, AllSourceFilesTobeDeleted}, #state{}=State) ->
@@ -217,3 +232,18 @@ ensure_table(TableName,TableAttrs) ->
         {aborted, Reason} ->
             throw(Reason)
     end.
+
+json_decode_lined(Body) ->
+	Lines = binary:split(Body, [<<"\n">>, <<"\r">>], [global]),
+	json_decode_lined(Lines, {incomplete, fun jsx:decode/1}, 0).
+
+json_decode_lined([], Result, _N) ->
+	Result;
+json_decode_lined([H|T], {incomplete, F}, N) when is_binary(H) ->
+	try F(H) of
+		Cont ->
+			json_decode_lined(T, Cont, N + 1)
+	catch
+		_:Reason ->
+			exit({json_parse_error, Reason, N, H})
+	end.

@@ -1,3 +1,3 @@
--record(source_file, {file, timestamp}).
+-record(source_file, {file, timestamp, parse_status}).
 -record(variable, {id, context, subject, name, value, origin}).
 -define(VAR_ID(Context, Subject, VariableName), {Context, Subject, VariableName}).
