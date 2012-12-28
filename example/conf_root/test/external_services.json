@@ -1,0 +1,6 @@
+{
+	"metrics_server"  : { "host" : "test.some.host.com",  			"port" : 123  },
+	"monitor_server"  : { "host" : "test.some.host2.com", 			"port" : 1234 },
+	"message_server"  : { "host" : "test.msg_bus.some.host2.com", 	"port" : 4565 },
+	"security_server" : { "host" : "test.ldap.some.host2.com", 		"port" : 4565 }
+}

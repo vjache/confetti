@@ -1,0 +1,4 @@
+{
+	"message_format" : "%r [%t] %-5p %c %x - %m%n",
+	"level" 		 : "DEBUG"
+}
