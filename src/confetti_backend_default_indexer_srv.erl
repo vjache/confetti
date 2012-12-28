@@ -40,25 +40,19 @@
 
 -record(state, {config_dir}).
 
+-define(SERVER, default_backend_indexer).
+
 %% ====================================================================
 %% External functions
 %% ====================================================================
 
 start_link() ->
-	gen_server:start_link({local, default_backend_indexer},?MODULE, [], []).
+	gen_server:start_link({local, ?SERVER},?MODULE, [], []).
 
 %% ====================================================================
 %% Server functions
 %% ====================================================================
 
-%% --------------------------------------------------------------------
-%% Function: init/1
-%% Description: Initiates the server
-%% Returns: {ok, State}          |
-%%          {ok, State, Timeout} |
-%%          ignore               |
-%%          {stop, Reason}
-%% --------------------------------------------------------------------
 init([]) ->
 	ConfigDir = confetti_app:get_conf_root_dir(),
 	ensure_mnesia_running(),
@@ -73,7 +67,6 @@ init([]) ->
 				 {attributes, record_info(fields,source_file)},
 				 {storage_properties,
 			     [{ets, [compressed]}]}]),
-	mnesia:subscribe({table, source_file, simple}),
 	self() ! scan_file_system,
 	{ok, #state{config_dir=ConfigDir}}.
 
@@ -84,12 +77,15 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+% HANDLE EVENT: Scan Source Files  
 handle_info(scan_file_system, #state{config_dir=Dir}=State) ->
+	Self = self(),
 	UpsertSourceFile = fun(#source_file{}=SourceFile) -> 
 							   {atomic,ok} = mnesia:transaction(
 											   fun() ->
 													   mnesia:write(SourceFile)
-											   end) 
+											   end),
+							   Self ! {parse_source_file, SourceFile}
 					   end, 
 	AllFilesFound = 
 		filelib:fold_files(
@@ -129,49 +125,57 @@ handle_info(scan_file_system, #state{config_dir=Dir}=State) ->
 	erlang:send_after(60000, self(), scan_file_system),
 	{noreply, State};
 
-handle_info({mnesia_table_event, {write, SrcFile = #source_file{file=File}, _}}, #state{config_dir=Dir}=State) ->
+% HANDLE EVENT: Parse Source File
+handle_info({parse_source_file, SrcFile = #source_file{ file = File } }, #state{config_dir=Dir}=State) ->
+	% 1. Parse file name to extract context & subject
 	{Context, Subject} 	= parse_source_filename(Dir, File),
+	% 2. Read source file
 	{ok, Body}			= file:read_file(File),
+	% 3. Parse JSON file
 	try json_decode_lined(Body) of
-		{incomplete, _F} -> exit({bad_formed_json_file, File});
-		JSONObj when tuple_size(hd(JSONObj))==2 ->
-			{atomic,ok} = mnesia:transaction(
-							fun() ->
-									clean_variables_by_origin(File),
-									[begin
-										 Var = #variable{id 	   	 = ?VAR_ID(Context, Subject, VarName),
-														 context 	 = Context,
-														 subject 	 = Subject, 
-														 name	   	 = VarName,
-														 value   	 = VarValue,
-														 origin  	 = File},
-										 mnesia:write(Var)
-									 end || {VarName, VarValue} <- JSONObj],
-									mnesia:write(SrcFile#source_file{parse_status=ok}),
-									ok
-							end),
+		JSONObj when tuple_size(hd(JSONObj)) == 2 ->
+			transaction(
+			  fun() ->
+					  % 4. Clean up data
+					  clean_variables_by_origin(File),
+					  % 5. Write variables
+					  [begin
+						   Var = #variable{id 	   	 = ?VAR_ID(Context, Subject, VarName),
+										   context 	 = Context,
+										   subject 	 = Subject, 
+										   name	   	 = VarName,
+										   value   	 = VarValue,
+										   origin  	 = File},
+						   mnesia:write(Var)
+					   end || {VarName, VarValue} <- JSONObj],
+					  % 6. Set parse status 'ok'
+					  mnesia:write(SrcFile#source_file{parse_status=ok}),
+					  ok
+			  end),
 			ok;
 		[{}] ->
-			{atomic,ok} = mnesia:transaction(
-							fun() ->
-									mnesia:write(SrcFile#source_file{parse_status=ok}),	ok
-							end)
+			transaction(
+			  fun() ->
+					  mnesia:write(SrcFile#source_file{parse_status=ok}),	ok
+			  end)
 	catch
 		_:{json_parse_error, Reason, LineNo, Line} ->
-			{atomic,ok} = mnesia:transaction(
-							fun() ->
-									Status = {json_parse_error, 
-											  [{reason, Reason}, 
-											   {line_no, LineNo}, 
-											   {line, Line}, 
-											   {file, File}]},
-									mnesia:write(SrcFile#source_file{parse_status=Status}),	ok
-							end)
+			Status = {json_parse_error, 
+					  [{reason, Reason}, 
+					   {line_no, LineNo}, 
+					   {line, Line}, 
+					   {file, File}]},
+			transaction(
+			  fun() ->
+					  mnesia:write(SrcFile#source_file{parse_status=Status}),	ok
+			  end)
 	end,
 	{noreply, State};
+
+% HANDLE EVENT: Clean Source File Entry At Mnesia
 handle_info({cleanup_source_files, AllSourceFilesTobeDeleted}, #state{}=State) ->
 	[begin
-		 mnesia:transaction(
+		 transaction(
 		   fun() ->
 				   mnesia:delete_object(SF),
 				   clean_variables_by_origin(File)
@@ -186,25 +190,19 @@ clean_variables_by_origin(Origin) ->
 	[mnesia:delete_object(V) || V <- VarsToDel],
 	ok.
 
-%% --------------------------------------------------------------------
-%% Function: terminate/2
-%% Description: Shutdown the server
-%% Returns: any (ignored by gen_server)
-%% --------------------------------------------------------------------
 terminate(_Reason, _State) ->
     ok.
 
-%% --------------------------------------------------------------------
-%% Func: code_change/3
-%% Purpose: Convert process state when code is changed
-%% Returns: {ok, NewState}
-%% --------------------------------------------------------------------
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %% --------------------------------------------------------------------
 %%% Internal functions
 %% --------------------------------------------------------------------
+
+transaction(Fun) ->
+	{atomic,Val} = mnesia:transaction(Fun),
+	Val.
 
 -spec parse_source_filename(Dir :: string(), SourceFilename :: string()) -> {Context :: [binary()], Subject :: binary()}.
 parse_source_filename(Dir, SourceFilename) ->
@@ -238,7 +236,10 @@ json_decode_lined(Body) ->
 	json_decode_lined(Lines, {incomplete, fun jsx:decode/1}, 0).
 
 json_decode_lined([], Result, _N) ->
-	Result;
+	case Result of
+		{incomplete, _F} 		 -> exit(json_incomplete);
+		_ when is_binary(Result) -> Result
+	end;
 json_decode_lined([H|T], {incomplete, F}, N) when is_binary(H) ->
 	try F(H) of
 		Cont ->
