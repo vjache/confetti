@@ -36,11 +36,12 @@
 %% --------------------------------------------------------------------
 %% Internal exports
 %% --------------------------------------------------------------------
--export([get_env/1, get_env/2, get_conf_root_dir/0]).
+-export([get_env/1, get_env/2, get_conf_root_dir/0, get_vsn/0, read_priv_file/1]).
 
 %% --------------------------------------------------------------------
 %% Macros
 %% --------------------------------------------------------------------
+-define(APPLICATION, confetti).
 
 %% --------------------------------------------------------------------
 %% Records
@@ -70,7 +71,7 @@ get_env(VarName) ->
     get_env(VarName,fun()-> throw({var_not_configured,VarName}) end).
 
 get_env(VarName,Fallback) ->
-    case application:get_env(confetti,VarName) of
+    case application:get_env(?APPLICATION,VarName) of
         {ok, Value} -> Value;
         undefined -> 
             if is_function(Fallback) -> Fallback();
@@ -80,6 +81,15 @@ get_env(VarName,Fallback) ->
 
 get_conf_root_dir() ->
 	confetti_app:get_env(conf_root_dir, "./conf").
+
+get_vsn() ->
+	{ok, Vsn} = application:get_key(?APPLICATION, vsn),
+	Vsn.
+
+read_priv_file(RelName) ->
+	Filename = filename:join(code:priv_dir(?APPLICATION), RelName),
+	{ok, Body} = file:read_file(Filename),
+	Body.
 
 %% ====================================================================
 %% Internal functions
@@ -95,7 +105,9 @@ get_http_server_pool_size() ->
 	get_env(http_poolsize, 100).
 
 start_webserver() ->
-	Handlers = [{[<<"conf">>, '...'], confetti_rest_api_handler, []}],
+	Handlers = [{[<<"conf">>, '...'], confetti_rest_api_handler, []},
+				{[<<"status">>], confetti_rest_status_handler, []},
+				{[], confetti_rest_status_handler, []}],
 	Dispatch = [
 				{get_http_server_hostname(), Handlers}
 			   ],
