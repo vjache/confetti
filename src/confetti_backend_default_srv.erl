@@ -48,27 +48,9 @@ start_link() ->
 %% Server functions
 %% ====================================================================
 
-%% --------------------------------------------------------------------
-%% Function: init/1
-%% Description: Initiates the server
-%% Returns: {ok, State}          |
-%%          {ok, State, Timeout} |
-%%          ignore               |
-%%          {stop, Reason}
-%% --------------------------------------------------------------------
 init([]) ->
     {ok, #state{}}.
 
-%% --------------------------------------------------------------------
-%% Function: handle_call/3
-%% Description: Handling call messages
-%% Returns: {reply, Reply, State}          |
-%%          {reply, Reply, State, Timeout} |
-%%          {noreply, State}               |
-%%          {noreply, State, Timeout}      |
-%%          {stop, Reason, Reply, State}   | (terminate/2 is called)
-%%          {stop, Reason, State}            (terminate/2 is called)
-%% --------------------------------------------------------------------
 handle_call({get_config, Request, Options}=Call, From, State) ->
 	spawn_link(
 	  fun() ->
@@ -87,43 +69,37 @@ handle_call({get_config, Request, Options}=Call, From, State) ->
 			  end
 	  end),
 	{noreply, State};
+handle_call({get_status, Options}=Call, From, State) ->
+	spawn_link(
+	  fun() ->
+			  try ConfData = get_status(),
+				  gen_server:reply(From, {ok, apply_options(ConfData, Options)})
+			  catch 
+				  _:Reason ->
+					  error_logger:error_report(
+						[{call, Call}, 
+						 {reason,Reason}, 
+						 {stacktarce, erlang:get_stacktrace()}, 
+						 {application, confetti}, 
+						 {module, ?MODULE}, 
+						 {line,?LINE}]),
+					  gen_server:reply(From, {error, Reason})
+			  end
+	  end),
+	{noreply, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
 
-%% --------------------------------------------------------------------
-%% Function: handle_cast/2
-%% Description: Handling cast messages
-%% Returns: {noreply, State}          |
-%%          {noreply, State, Timeout} |
-%%          {stop, Reason, State}            (terminate/2 is called)
-%% --------------------------------------------------------------------
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-%% --------------------------------------------------------------------
-%% Function: handle_info/2
-%% Description: Handling all non call/cast messages
-%% Returns: {noreply, State}          |
-%%          {noreply, State, Timeout} |
-%%          {stop, Reason, State}            (terminate/2 is called)
-%% --------------------------------------------------------------------
 handle_info(_Info, State) ->
     {noreply, State}.
 
-%% --------------------------------------------------------------------
-%% Function: terminate/2
-%% Description: Shutdown the server
-%% Returns: any (ignored by gen_server)
-%% --------------------------------------------------------------------
 terminate(_Reason, _State) ->
     ok.
 
-%% --------------------------------------------------------------------
-%% Func: code_change/3
-%% Purpose: Convert process state when code is changed
-%% Returns: {ok, NewState}
-%% --------------------------------------------------------------------
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -137,22 +113,44 @@ all_contexts(ContextPath) ->
 		 (C, [L|_]=Acc)-> [L++[C]|Acc] 
 	  end, [], ContextPath).
 
+get_all_subjects() ->
+	Query = qlc:q([S || #variable{subject = S} <- mnesia:table(variable)]),
+	mnesia:async_dirty(
+	  fun()->
+			  qlc:eval(Query, unique_all)
+	  end).
+
+get_status() ->
+	Query = qlc:q([SF || SF=#source_file{} <- mnesia:table(source_file)]),
+	Data = mnesia:async_dirty(
+	  fun()->
+			  qlc:eval(Query, unique_all)
+	  end),
+	Data1 = lists:keysort(#source_file.file, Data),
+	[ [{<<"file">>, 		confetti_util:to_binary(F)}, 
+	   {<<"parse_status">>, confetti_util:to_binary(S)}, 
+	   {<<"timestamp">>, 	confetti_util:to_binary(
+		  confetti_util:unix_epoch_time_to_universal(T))}] || #source_file{file = F, parse_status = S, timestamp = T} <- Data1].
+	
+
 get_config({subject, ContextPath, Subject}) ->
 	AllCtxData=[begin Query = qlc:q([{VarName, VarVal} || 
-						  #variable{context = C,
-									subject = S, 
-									name	 = VarName, 
-									value	 = VarVal} 
-									   <- mnesia:table(variable), C=:=Context,S=:=Subject]),
-		   mnesia:async_dirty(
-			 fun()->
-					 qlc:eval(Query)
-			 end)
-	 end || Context <- all_contexts(ContextPath)],
+									 #variable{context = C,
+											   subject = S, 
+											   name	 = VarName, 
+											   value	 = VarVal} 
+												  <- mnesia:table(variable), C=:=Context,S=:=Subject]),
+					  mnesia:async_dirty(
+						fun()->
+								qlc:eval(Query)
+						end)
+				end || Context <- all_contexts(ContextPath)],
 	merge(AllCtxData,undefined);
 
+get_config({subjects, ContextPath, []}) ->
+	[{Subject, get_config({subject, ContextPath, Subject}) }|| Subject <- get_all_subjects()];
 get_config({subjects, ContextPath, Subjects}) ->
-	[{Subject, get_config({subject, ContextPath, Subject}) }||Subject<-Subjects];
+	[{Subject, get_config({subject, ContextPath, Subject}) }|| Subject <- Subjects];
 
 get_config({subject_variable, ContextPath, Subject, VariableName}) ->
 	get_config({subject_variables, ContextPath, Subject, [VariableName]});

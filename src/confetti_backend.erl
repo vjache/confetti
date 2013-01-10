@@ -30,7 +30,8 @@
 %%
 %% Exported Functions
 %%
--export([get_subject_config/4,
+-export([get_status/2,
+		 get_subject_config/4,
 		 get_subject_variable_config/5,
 		 get_subject_variables_config/5,
 		 get_subjects_config/4]).
@@ -39,15 +40,17 @@
 %% API Functions
 %%
 
+get_status(BackendServerRef, Options) ->
+	validate_reply(
+	  gen_server:call(BackendServerRef, {get_status, Options})).
+
 get_subject_config(BackendServerRef, ContextPath, Subject, Options) 
   when is_binary(hd(ContextPath)), 
 	   is_binary(Subject) 		->
 	validate_reply(
 	  gen_server:call(BackendServerRef, {get_config, {subject, ContextPath, Subject}, Options})).
 
-get_subjects_config(BackendServerRef, ContextPath, Subjects, Options) 
-  when is_binary(hd(ContextPath)), 
-	   is_binary(hd(Subjects)) 	->
+get_subjects_config(BackendServerRef, ContextPath, Subjects, Options) ->
 	validate_reply(
 	  gen_server:call(BackendServerRef, {get_config, {subjects, ContextPath, Subjects}, Options})).
 

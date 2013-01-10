@@ -28,7 +28,8 @@
 %% Exported Functions
 %%
 -export([to_binary/1, 
-		 subst/2]).
+		 subst/2,
+		 unix_epoch_time_to_universal/1]).
 
 %%
 %% API Functions
@@ -39,7 +40,12 @@ to_binary(V) when is_atom(V) ->
 to_binary(V) when is_binary(V) ->
 	V;
 to_binary(V) when is_integer(hd(V)) ->
-	list_to_binary(V).
+	list_to_binary(V);
+to_binary({utc, {{Y, M, D}, {H, Min, S}}, Mls}) ->
+	list_to_binary(
+      io_lib:format(
+        "~.4.0w-~.2.0w-~.2.0wT~.2.0w:~.2.0w:~.2.0w.~.3.0wZ", 
+        [Y,M,D,H,Min,S,Mls])).
 
 subst(Body, VarBinds) when is_binary(Body), tuple_size(hd(VarBinds)) == 2 ->
 	lists:foldl(
@@ -49,6 +55,10 @@ subst(Body, VarBinds) when is_binary(Body), tuple_size(hd(VarBinds)) == 2 ->
 			  binary:replace(
 				Body, <<"${",BName/binary,"}">>, BValue, [global])
 	  end, Body, VarBinds).
+
+unix_epoch_time_to_universal(UnixEpochTimeSeconds) ->
+	{{Y, M, D}, {H, Min, S}} = calendar:gregorian_seconds_to_datetime(UnixEpochTimeSeconds),
+	{utc, {{Y + 1970, M, D}, {H, Min, S}}, 0}.
 
 %%
 %% Local Functions

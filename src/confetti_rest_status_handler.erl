@@ -36,9 +36,7 @@
 
 -export([init/3]).
 -export([content_types_provided/2]).
--export([hello_to_html/2]).
--export([hello_to_json/2]).
--export([hello_to_text/2]).
+-export([to_json/2, to_text/2]).
 
 init(_Transport, _Req, []) ->
 	io:format("INIT:~p~n", [_Req]),
@@ -46,70 +44,29 @@ init(_Transport, _Req, []) ->
 
 content_types_provided(Req, State) ->
 	{[
-		{<<"text/html">>, hello_to_html},
-		{<<"application/json">>, hello_to_json},
-		{<<"text/plain">>, hello_to_text}
-	], Req, State}.
-
-hello_to_html(Req, State) ->
-	Body0 	 = confetti_app:read_priv_file("web/status.html"),
-	VarBinds = [{vsn, confetti_app:get_vsn()}],
-	Body 	 = confetti_util:subst(Body0, VarBinds),
-	{Body, Req, State}.
+	  {<<"application/json">>, 	to_json },
+	  {<<"text/plain">>, 		to_text }
+	 ], Req, State}.
 
 % Possible requests are:
-%	* /ctx1/ctx2/.../ctxN?subject=SOME_SUBJECT
-%	* /ctx1/ctx2/.../ctxN?subject=SOME_SUBJECT&?variables=COMMA_SEPARATED_LIST_OF_VARs
-%	* /ctx1/ctx2/.../ctxN?subjects=COMMA_SEPARATED_LIST_OF_SOME_SUBJECTs
-% and also flag "&prettify=true" can be add to any above.
-hello_to_json(Req, State) ->
-	ContextPath = [_|_] = req(path_info, Req),
-	case req_qs_val(<<"prettify">>, Req) of
-		<<"true">> 	-> Opts = [prettify, json];
-		_ 			-> Opts = [json]
-	end,
-	Subjects 	= req_qs_val(<<"subjects">>, Req),
-	JSON = case Subjects of
-			   undefined ->
-				   Subject 	= req_qs_val(<<"subject">>, Req),
-				   Variables 	= req_qs_val(<<"variables">>, Req),
-				   case {Subject, Variables} of
-					   {undefined, _ } -> % No subject, hence raise error
-						   cowboy_req:reply(404,Req),
-						   exit(subject_expected);
-					   {_, undefined} -> % Subject only, hence all variables of a subject requested
-						   confetti_backend:get_subject_config(get_backend(Req), ContextPath, Subject, Opts);
-					   {_,_} -> % Subject an variables are defined, hence a subset of variables of a subject requested
-						   case binary:split(Variables, <<",">>, [global]) of
-							   [Variable] ->
-								   confetti_backend:get_subject_variable_config(
-									 get_backend(Req), ContextPath, Subject, Variable, Opts);
-							   VariableList ->
-								   confetti_backend:get_subject_variables_config(
-									 get_backend(Req), ContextPath, Subject, VariableList, Opts)
-						   end
-				   end;
-			   _ ->
-				   SubjectList = binary:split(Subjects, <<",">>, [global]),
-				   confetti_backend:get_subjects_config(
-					 get_backend(Req), ContextPath, SubjectList, Opts)
-		   end,
-	{JSON, Req, State}.
+%	* /status
+to_json(Req, State) ->
+	Template = confetti_app:read_priv_file("web/status.json"),
+	JSON = confetti_backend:get_status(
+			 get_backend(Req), []),
+	BVsn = confetti_util:to_binary(
+				   confetti_app:get_vsn()),
+	VarBinds = [{vsn, <<"\"",BVsn/binary, "\"">>}, 
+				{files_statuses, JSON}],
+	Body 	 = confetti_util:subst(Template, VarBinds),
+	{Body, Req, State}.
 
-hello_to_text(Req, State) ->
-	hello_to_json(Req, State).
+to_text(Req, State) ->
+	to_json(Req, State).
 
 %%
 %% Local Functions
 %%
-
-req(Func,Req) ->
-	{V,_}=cowboy_req:Func(Req),
-	V.
-
-req_qs_val(Name, Req) ->
-	{V,_}=cowboy_req:qs_val(Name, Req),
-	V.
 
 get_backend(_Req) ->
 	default_backend.

@@ -31,7 +31,6 @@
 
 -export([init/3,
 		 content_types_provided/2,
-		 to_html/2, 
 		 to_json/2, 
 		 to_text/2]).
 
@@ -44,22 +43,9 @@ init(_Transport, _Req, []) ->
 
 content_types_provided(Req, State) ->
 	{[
-%% 		{<<"text/html">>, to_html},
 		{<<"application/json">>, to_json},
 		{<<"text/plain">>, to_text}
 	], Req, State}.
-
-to_html(Req, State) ->
-	Body = <<"<html>
-<head>
-	<meta charset=\"utf-8\">
-	<title>REST Hello World!</title>
-</head>
-<body>
-	<p>REST Hello World as HTML!</p>
-</body>
-</html>">>,
-	{Body, Req, State}.
 
 % Possible requests are:
 %	* /ctx1/ctx2/.../ctxN?subject=SOME_SUBJECT
@@ -83,9 +69,11 @@ to_json(Req, State) ->
 to_json(_Req, _ContextPath, #args{subject = Subject, variables = Variables, subjects = Subjects}, _Opts, _State)
   when Subjects =/= ?UNDEF andalso (Subject =/= ?UNDEF orelse Variables =/= ?UNDEF) ->
 	exit(bad_arg_comb);
-to_json(Req, ContextPath, #args{subject = Subject, variables = ?UNDEF, subjects = ?UNDEF}, Opts, _State) ->
+to_json(Req, ContextPath, #args{subject = Subject, variables = ?UNDEF, subjects = ?UNDEF}, Opts, _State) 
+  when Subject =/= ?UNDEF ->
 	confetti_backend:get_subject_config(get_backend(Req), ContextPath, Subject, Opts);
-to_json(Req, ContextPath, #args{subject = Subject, variables = Variables, subjects = ?UNDEF}, Opts, _State) ->
+to_json(Req, ContextPath, #args{subject = Subject, variables = Variables, subjects = ?UNDEF}, Opts, _State) 
+  when Subject =/= ?UNDEF andalso Variables =/= ?UNDEF ->
 	case split(Variables) of
 		[Variable] ->
 			confetti_backend:get_subject_variable_config(
@@ -95,7 +83,10 @@ to_json(Req, ContextPath, #args{subject = Subject, variables = Variables, subjec
 			  get_backend(Req), ContextPath, Subject, VariableList, Opts)
 	end;
 to_json(Req, ContextPath, #args{subject = ?UNDEF, variables = ?UNDEF, subjects = Subjects}, Opts, _State) ->
-	SubjectList = split(Subjects),
+	SubjectList = case Subjects of 
+					  ?UNDEF -> [];
+					  _ 	 -> split(Subjects)
+				  end,
 	confetti_backend:get_subjects_config(
 	  get_backend(Req), ContextPath, SubjectList, Opts).
 
