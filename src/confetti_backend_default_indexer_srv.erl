@@ -237,8 +237,8 @@ json_decode_lined(Body) ->
 
 json_decode_lined([], Result, _N) ->
 	case Result of
-		{incomplete, _F} 		 -> exit(json_incomplete);
-		_ when is_binary(Result) -> Result
+		{incomplete, _F} 	-> exit(json_incomplete);
+		_ 					-> Result
 	end;
 json_decode_lined([H|T], {incomplete, F}, N) when is_binary(H) ->
 	try F(H) of
