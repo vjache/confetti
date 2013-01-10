@@ -102,7 +102,7 @@ get_http_server_hostname() ->
 	get_env(http_hostname, '_').
 
 get_http_server_pool_size() ->
-	get_env(http_poolsize, 100).
+	get_env(http_poolsize, 1).
 
 start_webserver() ->
 	Handlers = [{[<<"conf">>, '...'], confetti_rest_api_handler, []},
