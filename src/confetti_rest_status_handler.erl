@@ -39,7 +39,6 @@
 -export([to_json/2, to_text/2]).
 
 init(_Transport, _Req, []) ->
-	io:format("INIT:~p~n", [_Req]),
 	{upgrade, protocol, cowboy_rest}.
 
 content_types_provided(Req, State) ->

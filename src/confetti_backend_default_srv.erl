@@ -54,42 +54,42 @@ init([]) ->
 handle_call({get_config, Request, Options}=Call, From, State) ->
 	spawn_link(
 	  fun() ->
-			  try ConfData = get_config(Request),
-				  gen_server:reply(From, {ok, apply_options(ConfData, Options)})
-			  catch 
-				  _:Reason ->
-					  error_logger:error_report(
-						[{call, Call}, 
-						 {reason,Reason}, 
-						 {stacktarce, erlang:get_stacktrace()}, 
-						 {application, confetti}, 
-						 {module, ?MODULE}, 
-						 {line,?LINE}]),
-					  gen_server:reply(From, {error, Reason})
-			  end
+		  try ConfData = get_config(Request),
+		       gen_server:reply(From, {ok, apply_options(ConfData, Options)})
+		  catch 
+		      _:Reason ->
+			  error_logger:error_report(
+			    [{call, Call}, 
+			     {reason,Reason}, 
+			     {stacktarce, erlang:get_stacktrace()}, 
+			     {application, confetti}, 
+			     {module, ?MODULE}, 
+			     {line,?LINE}]),
+			  gen_server:reply(From, {error, Reason})
+		  end
 	  end),
-	{noreply, State};
+    {noreply, State};
 handle_call({get_status, Options}=Call, From, State) ->
-	spawn_link(
-	  fun() ->
-			  try ConfData = get_status(),
-				  gen_server:reply(From, {ok, apply_options(ConfData, Options)})
-			  catch 
-				  _:Reason ->
-					  error_logger:error_report(
-						[{call, Call}, 
-						 {reason,Reason}, 
-						 {stacktarce, erlang:get_stacktrace()}, 
-						 {application, confetti}, 
-						 {module, ?MODULE}, 
-						 {line,?LINE}]),
-					  gen_server:reply(From, {error, Reason})
-			  end
-	  end),
-	{noreply, State};
+    spawn_link(
+      fun() ->
+	      try ConfData = get_status(),
+		   gen_server:reply(From, {ok, apply_options(ConfData, Options)})
+	      catch 
+		  _:Reason ->
+		      error_logger:error_report(
+			[{call, Call}, 
+			 {reason,Reason}, 
+			 {stacktarce, erlang:get_stacktrace()}, 
+			 {application, confetti}, 
+			 {module, ?MODULE}, 
+			 {line,?LINE}]),
+		      gen_server:reply(From, {error, Reason})
+	      end
+      end),
+    {noreply, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
-    {reply, Reply, State}.
+    {reply, Re5Aply, State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -110,21 +110,21 @@ code_change(_OldVsn, State, _Extra) ->
 all_contexts(ContextPath) ->
 	lists:foldl(
 	  fun(C, [])-> [[C]];
-		 (C, [L|_]=Acc)-> [L++[C]|Acc] 
+	     (C, [L|_]=Acc)-> [L++[C]|Acc] 
 	  end, [], ContextPath).
 
 get_all_subjects() ->
 	Query = qlc:q([S || #variable{subject = S} <- mnesia:table(variable)]),
 	mnesia:async_dirty(
 	  fun()->
-			  qlc:eval(Query, unique_all)
+		  qlc:eval(Query, unique_all)
 	  end).
 
 get_status() ->
 	Query = qlc:q([SF || SF=#source_file{} <- mnesia:table(source_file)]),
 	Data = mnesia:async_dirty(
 	  fun()->
-			  qlc:eval(Query, unique_all)
+		  qlc:eval(Query, unique_all)
 	  end),
 	Data1 = lists:keysort(#source_file.file, Data),
 	[ [{<<"file">>, 		confetti_util:to_binary(F)}, 
@@ -134,18 +134,19 @@ get_status() ->
 	
 
 get_config({subject, ContextPath, Subject}) ->
-	AllCtxData=[begin Query = qlc:q([{VarName, VarVal} || 
-									 #variable{context = C,
-											   subject = S, 
-											   name	 = VarName, 
-											   value	 = VarVal} 
-												  <- mnesia:table(variable), C=:=Context,S=:=Subject]),
-					  mnesia:async_dirty(
-						fun()->
-								qlc:eval(Query)
-						end)
-				end || Context <- all_contexts(ContextPath)],
-	merge(AllCtxData,undefined);
+	AllCtxData =
+	[begin Query = qlc:q([{VarName, VarVal} || 
+				 #variable{context = C,
+					   subject = S, 
+					   name	   = VarName, 
+					   value   = VarVal} 
+				     <- mnesia:table(variable), C=:=Context,S=:=Subject]),
+	       mnesia:async_dirty(
+		 fun()->
+			 qlc:eval(Query)
+		 end)
+	 end || Context <- all_contexts(ContextPath)],
+    merge(AllCtxData,undefined);
 
 get_config({subjects, ContextPath, []}) ->
 	[{Subject, get_config({subject, ContextPath, Subject}) }|| Subject <- get_all_subjects()];

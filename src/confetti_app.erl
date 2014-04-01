@@ -36,7 +36,12 @@
 %% --------------------------------------------------------------------
 %% Internal exports
 %% --------------------------------------------------------------------
--export([get_env/1, get_env/2, get_conf_root_dir/0, get_vsn/0, read_priv_file/1]).
+-export([ start/0,
+	  get_env/1, 
+	  get_env/2, 
+	  get_conf_root_dir/0, 
+	  get_vsn/0, 
+	  read_priv_file/1 ]).
 
 %% --------------------------------------------------------------------
 %% Macros
@@ -51,6 +56,8 @@
 %% API Functions
 %% --------------------------------------------------------------------
 
+start() ->
+    {ok,_} = application:ensure_all_started(confetti).
 
 %% ====================================================================!
 %% External functions
@@ -105,14 +112,14 @@ get_http_server_pool_size() ->
 	get_env(http_poolsize, 1).
 
 start_webserver() ->
-	Handlers = [{[<<"conf">>, '...'], confetti_rest_api_handler, []},
-				{[<<"status">>], confetti_rest_status_handler, []},
-				{[], confetti_rest_status_handler, []}],
-	Dispatch = [
-				{get_http_server_hostname(), Handlers}
-			   ],
-	{ok, _} = cowboy:start_http(
-				http, 
-				get_http_server_pool_size(), 
-				[{port, get_http_server_port()}], 
-				[{dispatch, Dispatch} ]).
+    Handlers = [{[<<"/conf/[...]">>], confetti_rest_api_handler, []},
+		{[<<"/status">>], confetti_rest_status_handler, []},
+		{[<<"/">>], confetti_rest_status_handler, []}],
+    Dispatch = cowboy_router:compile(
+		 [{get_http_server_hostname(), Handlers}]),
+    {ok, _} = cowboy:start_http(
+		http, get_http_server_pool_size(), 
+		[{port, get_http_server_port()}], 
+		[
+		 {env, [{dispatch, Dispatch}]}
+		]).

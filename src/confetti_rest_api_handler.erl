@@ -38,7 +38,6 @@
 -define(UNDEF, undefined).
 
 init(_Transport, _Req, []) ->
-	io:format("INIT:~p~n", [_Req]),
 	{upgrade, protocol, cowboy_rest}.
 
 content_types_provided(Req, State) ->
@@ -53,45 +52,63 @@ content_types_provided(Req, State) ->
 %	* /ctx1/ctx2/.../ctxN?subjects=COMMA_SEPARATED_LIST_OF_SOME_SUBJECTs
 % and also flag "&prettify=true" can be add to any above.
 to_json(Req, State) ->
-	try
+    try
 	ContextPath = [_|_] = req(path_info, Req),
 	Args = parse_args(Req),
 	Opts = opts(Args, [json]),
 	JSON = to_json(Req, ContextPath, Args, Opts, State),
 	{JSON, Req, State}
-	catch
-		_:bad_arg_comb ->
-			cowboy_req:reply(404,Req);
-		_:{unexpected_arguments, _ListUnexpected} ->
-			cowboy_req:reply(404,Req)
-	end.
+    catch
+	_:bad_arg_comb ->
+	    cowboy_req:reply(404,Req);
+	_:{unexpected_arguments, _ListUnexpected} ->
+	    cowboy_req:reply(404,Req)
+    end.
 
-to_json(_Req, _ContextPath, #args{subject = Subject, variables = Variables, subjects = Subjects}, _Opts, _State)
-  when Subjects =/= ?UNDEF andalso (Subject =/= ?UNDEF orelse Variables =/= ?UNDEF) ->
-	exit(bad_arg_comb);
-to_json(Req, ContextPath, #args{subject = Subject, variables = ?UNDEF, subjects = ?UNDEF}, Opts, _State) 
+to_json(_Req, _ContextPath, 
+	#args{subject   = Subject, 
+	      variables = Variables, 
+	      subjects  = Subjects}, 
+	_Opts, _State)
+  when Subjects =/= ?UNDEF andalso 
+       (Subject =/= ?UNDEF orelse Variables =/= ?UNDEF) ->
+    exit(bad_arg_comb);
+to_json(Req, ContextPath, 
+	#args{subject   = Subject, 
+	      variables = ?UNDEF, 
+	      subjects  = ?UNDEF}, 
+	Opts, _State) 
   when Subject =/= ?UNDEF ->
-	confetti_backend:get_subject_config(get_backend(Req), ContextPath, Subject, Opts);
-to_json(Req, ContextPath, #args{subject = Subject, variables = Variables, subjects = ?UNDEF}, Opts, _State) 
-  when Subject =/= ?UNDEF andalso Variables =/= ?UNDEF ->
-	case split(Variables) of
-		[Variable] ->
-			confetti_backend:get_subject_variable_config(
-			  get_backend(Req), ContextPath, Subject, Variable, Opts);
-		VariableList ->
-			confetti_backend:get_subject_variables_config(
-			  get_backend(Req), ContextPath, Subject, VariableList, Opts)
-	end;
-to_json(Req, ContextPath, #args{subject = ?UNDEF, variables = ?UNDEF, subjects = Subjects}, Opts, _State) ->
-	SubjectList = case Subjects of 
-					  ?UNDEF -> [];
-					  _ 	 -> split(Subjects)
-				  end,
-	confetti_backend:get_subjects_config(
-	  get_backend(Req), ContextPath, SubjectList, Opts).
+    confetti_backend:get_subject_config(get_backend(Req), ContextPath, Subject, Opts);
+to_json(Req, ContextPath, 
+	#args{subject   = Subject, 
+	      variables = Variables, 
+	      subjects  = ?UNDEF}, 
+	Opts, _State) 
+  when Subject =/= ?UNDEF andalso 
+       Variables =/= ?UNDEF ->
+    case split(Variables) of
+	[Variable] ->
+	    confetti_backend:get_subject_variable_config(
+	      get_backend(Req), ContextPath, Subject, Variable, Opts);
+	VariableList ->
+	    confetti_backend:get_subject_variables_config(
+	      get_backend(Req), ContextPath, Subject, VariableList, Opts)
+    end;
+to_json(Req, ContextPath, 
+	#args{subject   = ?UNDEF, 
+	      variables = ?UNDEF, 
+	      subjects  = Subjects}, 
+	Opts, _State) ->
+    SubjectList = case Subjects of 
+		      ?UNDEF -> [];
+		      _ 	 -> split(Subjects)
+		  end,
+    confetti_backend:get_subjects_config(
+      get_backend(Req), ContextPath, SubjectList, Opts).
 
 to_text(Req, State) ->
-	to_json(Req, State).
+    to_json(Req, State).
 
 %%
 %% Local Functions
