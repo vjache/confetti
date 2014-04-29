@@ -49,11 +49,11 @@ to_binary({utc, {{Y, M, D}, {H, Min, S}}, Mls}) ->
 
 subst(Body, VarBinds) when is_binary(Body), tuple_size(hd(VarBinds)) == 2 ->
 	lists:foldl(
-	  fun({Name, Value}, Body) ->
+	  fun({Name, Value}, BodyAcc) ->
 			  BName = to_binary(Name),
 			  BValue = to_binary(Value),
 			  binary:replace(
-				Body, <<"${",BName/binary,"}">>, BValue, [global])
+				BodyAcc, <<"${",BName/binary,"}">>, BValue, [global])
 	  end, Body, VarBinds).
 
 unix_epoch_time_to_universal(UnixEpochTimeSeconds) ->

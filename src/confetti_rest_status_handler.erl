@@ -52,9 +52,9 @@ content_types_provided(Req, State) ->
 to_json(Req, State) ->
 	Template = confetti_app:read_priv_file("web/status.json"),
 	JSON = confetti_backend:get_status(
-			 get_backend(Req), []),
+		 get_backend(Req), []),
 	BVsn = confetti_util:to_binary(
-				   confetti_app:get_vsn()),
+		 confetti_app:get_vsn()),
 	VarBinds = [{vsn, <<"\"",BVsn/binary, "\"">>}, 
 				{files_statuses, JSON}],
 	Body 	 = confetti_util:subst(Template, VarBinds),

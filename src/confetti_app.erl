@@ -103,7 +103,7 @@ read_priv_file(RelName) ->
 %% ====================================================================
 
 get_http_server_port() ->
-	get_env(http_port, 8008).
+	get_env(http_port, 9090).
 
 get_http_server_hostname() ->
 	get_env(http_hostname, '_').
@@ -117,9 +117,12 @@ start_webserver() ->
 		{[<<"/">>], confetti_rest_status_handler, []}],
     Dispatch = cowboy_router:compile(
 		 [{get_http_server_hostname(), Handlers}]),
+    Port = get_http_server_port(),
+    lager:log(notice, [{application,confetti}], 
+	      "Configuration RESTful API listens at port ~p", [Port]),
     {ok, _} = cowboy:start_http(
 		http, get_http_server_pool_size(), 
-		[{port, get_http_server_port()}], 
+		[{port, Port}], 
 		[
 		 {env, [{dispatch, Dispatch}]}
 		]).

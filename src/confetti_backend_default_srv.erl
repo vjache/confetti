@@ -58,13 +58,16 @@ handle_call({get_config, Request, Options}=Call, From, State) ->
 		       gen_server:reply(From, {ok, apply_options(ConfData, Options)})
 		  catch 
 		      _:Reason ->
-			  error_logger:error_report(
-			    [{call, Call}, 
-			     {reason,Reason}, 
-			     {stacktarce, erlang:get_stacktrace()}, 
-			     {application, confetti}, 
+			  lager:log(
+			    error, 
+			    [{application, confetti}, 
 			     {module, ?MODULE}, 
-			     {line,?LINE}]),
+			     {line,   ?LINE},
+			     {pid, self()}], 
+			    "Request failed: REQ = ~p, REASON = ~p, STACKTRACE = ~p.", 
+			    [Call, 
+			     Reason, 
+			     erlang:get_stacktrace()]),
 			  gen_server:reply(From, {error, Reason})
 		  end
 	  end),
@@ -76,20 +79,23 @@ handle_call({get_status, Options}=Call, From, State) ->
 		   gen_server:reply(From, {ok, apply_options(ConfData, Options)})
 	      catch 
 		  _:Reason ->
-		      error_logger:error_report(
-			[{call, Call}, 
-			 {reason,Reason}, 
-			 {stacktarce, erlang:get_stacktrace()}, 
-			 {application, confetti}, 
-			 {module, ?MODULE}, 
-			 {line,?LINE}]),
+		      lager:log(
+			    error, 
+			    [{application, confetti}, 
+			     {module, ?MODULE}, 
+			     {line,   ?LINE},
+			     {pid, self()}], 
+			    "Request failed: REQ = ~p, REASON = ~p, STACKTRACE = ~p.", 
+			    [Call, 
+			     Reason, 
+			     erlang:get_stacktrace()]),
 		      gen_server:reply(From, {error, Reason})
 	      end
       end),
     {noreply, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
-    {reply, Re5Aply, State}.
+    {reply, Reply, State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
